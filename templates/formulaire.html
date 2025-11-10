@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saisie Dictionnaire Kabyè</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select, textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button { background: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #45a049; }
+        .success { color: green; margin-top: 10px; }
+        .error { color: red; margin-top: 10px; }
+        .btn-special {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            margin: 2px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .btn-special:hover {
+            background: #0b7dda;
+        }
+    </style>
+</head>
+<body>
+    <h1>📝 Contribution au Dictionnaire Kabyè</h1>
+    
+    <form id="formMot">
+        <div class="form-group">
+            <label for="mot_kabye">Mot Kabyè *</label>
+            <input type="text" id="mot_kabye" name="mot_kabye" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="api">Prononciation (API)</label>
+            <input type="text" id="api" name="api" placeholder="Ex: [kabiyɛ]">
+            <small>Caractères spéciaux: ɛ ɩ ɔ ŋ ɣ</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="traduction_francaise">Traduction française *</label>
+            <textarea id="traduction_francaise" name="traduction_francaise" rows="3" required></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="categorie_grammaticale">Catégorie grammaticale</label>
+            <select id="categorie_grammaticale" name="categorie_grammaticale">
+                <option value="">-- Choisir --</option>
+                <option value="nom">Nom</option>
+                <option value="verbe">Verbe</option>
+                <option value="adjectif">Adjectif</option>
+                <option value="adverbe">Adverbe</option>
+                <option value="préfixe">Préfixe</option>
+                <option value="suffixe">Suffixe</option>
+                <option value="interjection">Interjection</option>
+                <option value="pronom">Pronom</option>
+                <option value="conjonction">Conjonction</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="exemple_usage">Exemple d'usage</label>
+            <textarea id="exemple_usage" name="exemple_usage" rows="3" placeholder="Phrase complète en kabyè"></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="verifie_par">Votre nom/pseudo *</label>
+            <input type="text" id="verifie_par" name="verifie_par" required>
+        </div>
+        
+        <button type="submit">💾 Sauvegarder le mot</button>
+    </form>
+    
+    <div id="message"></div>
+    <div class="form-group">
+    <label>Caractères spéciaux Kabyè :</label>
+    <div style="margin: 10px 0;">
+        <button type="button" onclick="insererCaractere('ɛ')" class="btn-special">ɛ</button>
+        <button type="button" onclick="insererCaractere('ɩ')" class="btn-special">ɩ</button>
+        <button type="button" onclick="insererCaractere('ɔ')" class="btn-special">ɔ</button>
+        <button type="button" onclick="insererCaractere('ŋ')" class="btn-special">ŋ</button>
+        <button type="button" onclick="insererCaractere('ɣ')" class="btn-special">ɣ</button>
+        <button type="button" onclick="insererCaractere('Ɛ')" class="btn-special">Ɛ</button>
+        <button type="button" onclick="insererCaractere('Ɩ')" class="btn-special">Ɩ</button>
+        <button type="button" onclick="insererCaractere('Ɔ')" class="btn-special">Ɔ</button>
+        <button type="button" onclick="insererCaractere('Ŋ')" class="btn-special">Ŋ</button>
+        <button type="button" onclick="insererCaractere('Ɣ')" class="btn-special">Ɣ</button>
+    </div>
+</div>
+    
+    <script>
+        document.getElementById('formMot').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData);
+            
+            fetch('/sauvegarder', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                const messageDiv = document.getElementById('message');
+                if (result.success) {
+                    messageDiv.innerHTML = '<div class="success">✅ Mot sauvegardé avec succès !</div>';
+                    document.getElementById('formMot').reset();
+                } else {
+                    messageDiv.innerHTML = `<div class="error">❌ Erreur: ${result.error}</div>`;
+                }
+            })
+            .catch(error => {
+                document.getElementById('message').innerHTML = '<div class="error">❌ Erreur de connexion</div>';
+            });
+        });
+
+        function insererCaractere(caractere) {
+            const apiInput = document.getElementById('api');
+            apiInput.value += caractere;
+            apiInput.focus();
+        }
+    </script>
+</body>
+</html>
