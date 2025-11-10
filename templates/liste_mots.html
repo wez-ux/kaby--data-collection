@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mots du Dictionnaire Kabyè</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { 
+            color: #2c5530; 
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .nav {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .nav a {
+            padding: 10px 20px;
+            background: #6c757d;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .nav a:hover {
+            background: #5a6268;
+        }
+        .stats {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #2c5530;
+            color: white;
+        }
+        tr:hover {
+            background: #f5f5f5;
+        }
+        .api {
+            font-family: monospace;
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📖 Mots du Dictionnaire Kabyè</h1>
+        
+        <div class="nav">
+            <a href="/">➕ Ajouter un mot</a>
+            <a href="/">🏠 Accueil</a>
+        </div>
+
+        <div class="stats">
+            <strong>Total des mots : {{ mots|length }}</strong>
+        </div>
+
+        {% if mots %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Mot Kabyè</th>
+                    <th>API</th>
+                    <th>Traduction</th>
+                    <th>Catégorie</th>
+                    <th>Exemple</th>
+                    <th>Contributeur</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mot in mots %}
+                <tr>
+                    <td><strong>{{ mot.mot_kabye }}</strong></td>
+                    <td><span class="api">{{ mot.api or '' }}</span></td>
+                    <td>{{ mot.traduction_francaise }}</td>
+                    <td>{{ mot.categorie_grammaticale or '' }}</td>
+                    <td>{{ mot.exemple_usage or '' }}</td>
+                    <td>{{ mot.verifie_par }}</td>
+                    <td>{{ mot.date_ajout[:10] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="text-align: center; color: #666; padding: 40px;">
+            Aucun mot n'a été ajouté yet. <a href="/">Soyez le premier à contribuer !</a>
+        </p>
+        {% endif %}
+    </div>
+</body>
+</html>

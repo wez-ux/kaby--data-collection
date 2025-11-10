@@ -1,14 +1,28 @@
 from flask import Flask, render_template, request, jsonify
 import sqlite3
-import csv
 import os
+from datetime import datetime
 
 app = Flask(__name__)
 
-# Initialisation de la base de données
+def get_db_connection():
+    """Connexion DB adaptée pour Render"""
+    if 'RENDER' in os.environ:
+        # Sur Render, on utilise un chemin persistant
+        db_path = '/opt/render/project/src/dictionnaire_kabye.db'
+    else:
+        # En local
+        db_path = 'dictionnaire_kabye.db'
+    
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
 def init_db():
-    conn = sqlite3.connect('dictionnaire_kabye.db')
+    """Initialisation de la base de données"""
+    conn = get_db_connection()
     c = conn.cursor()
+    
     c.execute('''
         CREATE TABLE IF NOT EXISTS mots_kabye (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,19 +35,36 @@ def init_db():
             date_ajout TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    
+    # Exemples initiaux
+    c.execute('SELECT COUNT(*) FROM mots_kabye')
+    if c.fetchone()[0] == 0:
+        exemples = [
+            ('aalayu', '[âlâyú]', 'qui sera le premier', 'nom', 'Aalayu tem qui sera le premier à finir', 'Admin'),
+            ('abaa', '[ábaa]', 'exprime la pitié, innocence', 'interjection', 'Pakpa-u hayu abaa yem', 'Admin'),
+            ('ɛ', '[ɛ]', 'voyère mi-ouverte antérieure non arrondie', 'lettre', '', 'Système')
+        ]
+        c.executemany('''
+            INSERT INTO mots_kabye (mot_kabye, api, traduction_francaise, categorie_grammaticale, exemple_usage, verifie_par)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', exemples)
+    
     conn.commit()
     conn.close()
 
 @app.route('/')
-def formulaire():
+def accueil():
     return render_template('formulaire.html')
 
 @app.route('/sauvegarder', methods=['POST'])
 def sauvegarder():
     try:
-        data = request.json
+        data = request.get_json()
         
-        conn = sqlite3.connect('dictionnaire_kabye.db')
+        if not data.get('mot_kabye') or not data.get('traduction_francaise'):
+            return jsonify({'success': False, 'error': 'Mot kabyè et traduction obligatoires'})
+        
+        conn = get_db_connection()
         c = conn.cursor()
         
         c.execute('''
@@ -41,38 +72,54 @@ def sauvegarder():
             (mot_kabye, api, traduction_francaise, categorie_grammaticale, exemple_usage, verifie_par)
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (
-            data['mot_kabye'],
-            data['api'],
-            data['traduction_francaise'],
-            data['categorie_grammaticale'],
-            data['exemple_usage'],
-            data['verifie_par']
+            data['mot_kabye'].strip(),
+            data.get('api', '').strip(),
+            data['traduction_francaise'].strip(),
+            data.get('categorie_grammaticale', '').strip(),
+            data.get('exemple_usage', '').strip(),
+            data.get('verifie_par', 'Anonyme').strip()
         ))
         
         conn.commit()
         conn.close()
         
-        return jsonify({'success': True, 'message': 'Mot sauvegardé !'})
+        return jsonify({
+            'success': True, 
+            'message': f'✅ Mot "{data["mot_kabye"]}" sauvegardé !'
+        })
     
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
-@app.route('/export-csv')
-def export_csv():
-    conn = sqlite3.connect('dictionnaire_kabye.db')
+@app.route('/mots')
+def liste_mots():
+    """Voir tous les mots"""
+    conn = get_db_connection()
     c = conn.cursor()
-    c.execute('SELECT * FROM mots_kabye')
+    c.execute('SELECT * FROM mots_kabye ORDER BY date_ajout DESC')
     mots = c.fetchall()
     conn.close()
     
-    # Création du CSV
-    with open('dictionnaire_contributions.csv', 'w', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow(['ID', 'Mot Kabyè', 'API', 'Traduction', 'Catégorie', 'Exemple', 'Vérifié par', 'Date'])
-        writer.writerows(mots)
+    return render_template('liste_mots.html', mots=mots)
+
+@app.route('/api/mots')
+def api_mots():
+    """API pour récupérer les mots en JSON"""
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('SELECT * FROM mots_kabye ORDER BY mot_kabye')
+    mots = c.fetchall()
+    conn.close()
     
-    return jsonify({'success': True, 'message': 'CSV exporté !'})
+    mots_list = []
+    for mot in mots:
+        mots_list.append(dict(mot))
+    
+    return jsonify(mots_list)
+
+# Initialisation au démarrage
+init_db()
 
 if __name__ == '__main__':
-    init_db()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
