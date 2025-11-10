@@ -2,84 +2,106 @@ from flask import Flask, render_template, request, jsonify
 import json
 import os
 from datetime import datetime
-from pathlib import Path
 
 app = Flask(__name__)
 
-# Configuration
-DATA_DIR = Path('data')
-DATA_FILE = DATA_DIR / 'mots_kabye.json'
+# Configuration Vercel KV
+KV_KEY = "mots_kabye"
 
-def initialiser_donnees():
-    """Créer le dossier data et le fichier JSON s'ils n'existent pas"""
-    DATA_DIR.mkdir(exist_ok=True)
-    
-    if not DATA_FILE.exists():
-        donnees_initiales = {
-            "mots": [
-                {
-                    "id": 1,
-                    "mot_kabye": "aalayu",
-                    "api": "[âlâyú]",
-                    "traduction_francaise": "qui sera le premier",
-                    "categorie_grammaticale": "nom",
-                    "exemple_usage": "Aalayu tem qui sera le premier à finir",
-                    "verifie_par": "Admin",
-                    "date_ajout": "2024-01-15 10:00:00"
-                },
-                {
-                    "id": 2,
-                    "mot_kabye": "abaa",
-                    "api": "[ábaa]",
-                    "traduction_francaise": "exprime la pitié, l'innocence, l'agacement",
-                    "categorie_grammaticale": "interjection",
-                    "exemple_usage": "Pakpa-u hayu abaa yem",
-                    "verifie_par": "Admin",
-                    "date_ajout": "2024-01-15 10:05:00"
-                },
-                {
-                    "id": 3,
-                    "mot_kabye": "ɛ",
-                    "api": "[ɛ]",
-                    "traduction_francaise": "voyelle mi-ouverte antérieure non arrondie",
-                    "categorie_grammaticale": "lettre",
-                    "exemple_usage": "",
-                    "verifie_par": "Système",
-                    "date_ajout": "2024-01-15 10:10:00"
-                }
-            ],
-            "prochain_id": 4
-        }
-        sauvegarder_donnees(donnees_initiales)
-        return donnees_initiales
-    
-    return charger_donnees()
+# Import conditionnel pour Vercel KV
+try:
+    from vercel_kv import kv
+    KV_AVAILABLE = True
+    print("✅ Vercel KV disponible")
+except ImportError:
+    KV_AVAILABLE = False
+    print("❌ Vercel KV non disponible - mode mémoire activé")
 
-def charger_donnees():
-    """Charger les données depuis le fichier JSON"""
-    try:
-        with open(DATA_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"Erreur chargement: {e}")
-        return initialiser_donnees()
+def initialiser_donnees_par_defaut():
+    """Données par défaut"""
+    return {
+        "mots": [
+            {
+                "id": 1,
+                "mot_kabye": "aalayu",
+                "api": "[âlâyú]",
+                "traduction_francaise": "qui sera le premier",
+                "categorie_grammaticale": "nom",
+                "exemple_usage": "Aalayu tem qui sera le premier à finir",
+                "verifie_par": "Admin",
+                "date_ajout": "2024-01-15 10:00:00"
+            },
+            {
+                "id": 2,
+                "mot_kabye": "abaa",
+                "api": "[ábaa]",
+                "traduction_francaise": "exprime la pitié, l'innocence, l'agacement",
+                "categorie_grammaticale": "interjection",
+                "exemple_usage": "Pakpa-u hayu abaa yem",
+                "verifie_par": "Admin",
+                "date_ajout": "2024-01-15 10:05:00"
+            },
+            {
+                "id": 3,
+                "mot_kabye": "ɛ",
+                "api": "[ɛ]",
+                "traduction_francaise": "voyelle mi-ouverte antérieure non arrondie",
+                "categorie_grammaticale": "lettre",
+                "exemple_usage": "",
+                "verifie_par": "Système",
+                "date_ajout": "2024-01-15 10:10:00"
+            }
+        ],
+        "prochain_id": 4
+    }
 
-def sauvegarder_donnees(donnees):
-    """Sauvegarder les données dans le fichier JSON"""
-    try:
-        with open(DATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump(donnees, f, ensure_ascii=False, indent=2)
+# Stockage en mémoire de secours
+donnees_memoire = initialiser_donnees_par_defaut()
+
+async def charger_donnees():
+    """Charger les données depuis Vercel KV ou mémoire"""
+    if KV_AVAILABLE:
+        try:
+            data = await kv.get(KV_KEY)
+            if data:
+                print("✅ Données chargées depuis Vercel KV")
+                return json.loads(data)
+            else:
+                # Initialiser KV avec les données par défaut
+                donnees_defaut = initialiser_donnees_par_defaut()
+                await kv.set(KV_KEY, json.dumps(donnees_defaut))
+                print("✅ Données initialisées dans Vercel KV")
+                return donnees_defaut
+        except Exception as e:
+            print(f"❌ Erreur Vercel KV: {e}")
+            return donnees_memoire
+    else:
+        print("📝 Mode mémoire activé")
+        return donnees_memoire
+
+async def sauvegarder_donnees(donnees):
+    """Sauvegarder les données dans Vercel KV ou mémoire"""
+    if KV_AVAILABLE:
+        try:
+            await kv.set(KV_KEY, json.dumps(donnees))
+            print("✅ Données sauvegardées dans Vercel KV")
+            return True
+        except Exception as e:
+            print(f"❌ Erreur sauvegarde Vercel KV: {e}")
+            return False
+    else:
+        # Mode mémoire
+        global donnees_memoire
+        donnees_memoire = donnees
+        print("📝 Données sauvegardées en mémoire")
         return True
-    except Exception as e:
-        print(f"Erreur sauvegarde: {e}")
-        return False
 
 @app.route('/')
 def accueil():
     return render_template('formulaire.html')
 
 @app.route('/sauvegarder', methods=['POST'])
-def sauvegarder_mot():
+async def sauvegarder_mot():
     try:
         data = request.get_json()
         
@@ -88,7 +110,7 @@ def sauvegarder_mot():
             return jsonify({'success': False, 'error': 'Mot kabyè et traduction française sont obligatoires'})
         
         # Charger les données existantes
-        donnees = charger_donnees()
+        donnees = await charger_donnees()
         
         # Vérifier si le mot existe déjà
         mot_existe = any(mot['mot_kabye'].lower() == data['mot_kabye'].lower() 
@@ -114,7 +136,7 @@ def sauvegarder_mot():
         donnees['prochain_id'] += 1
         
         # Sauvegarder
-        if sauvegarder_donnees(donnees):
+        if await sauvegarder_donnees(donnees):
             return jsonify({
                 'success': True, 
                 'message': f'✅ Mot "{data["mot_kabye"]}" sauvegardé avec succès !'
@@ -126,9 +148,9 @@ def sauvegarder_mot():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/mots')
-def liste_mots():
+async def liste_mots():
     """Afficher tous les mots"""
-    donnees = charger_donnees()
+    donnees = await charger_donnees()
     mots = donnees['mots']
     
     # Trier par mot kabyè
@@ -137,15 +159,15 @@ def liste_mots():
     return render_template('liste_mots.html', mots=mots_tries)
 
 @app.route('/api/mots')
-def api_mots():
+async def api_mots():
     """API pour récupérer les mots en JSON"""
-    donnees = charger_donnees()
+    donnees = await charger_donnees()
     return jsonify(donnees['mots'])
 
 @app.route('/statistiques')
-def statistiques():
+async def statistiques():
     """Page de statistiques"""
-    donnees = charger_donnees()
+    donnees = await charger_donnees()
     mots = donnees['mots']
     
     stats = {
@@ -168,10 +190,10 @@ def statistiques():
                          mots=mots)
 
 @app.route('/rechercher')
-def rechercher():
+async def rechercher():
     """Page de recherche"""
     terme = request.args.get('q', '')
-    donnees = charger_donnees()
+    donnees = await charger_donnees()
     
     if terme:
         mots_trouves = [
@@ -187,8 +209,18 @@ def rechercher():
                          terme=terme,
                          total=len(mots_trouves))
 
-# Initialisation au démarrage
-initialiser_donnees()
+@app.route('/export')
+async def exporter_donnees():
+    """Exporter les données en JSON"""
+    donnees = await charger_donnees()
+    return jsonify({
+        'success': True,
+        'data': donnees,
+        'total_mots': len(donnees['mots'])
+    })
+
+# Pas besoin d'initialisation au démarrage avec Vercel KV
+# Les données sont chargées à la demande
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
