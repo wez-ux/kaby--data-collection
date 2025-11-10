@@ -27,6 +27,7 @@
             display: flex;
             gap: 10px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         }
         .nav a {
             padding: 10px 20px;
@@ -34,9 +35,16 @@
             color: white;
             text-decoration: none;
             border-radius: 5px;
+            transition: background 0.3s;
         }
         .nav a:hover {
             background: #5a6268;
+        }
+        .nav a.primary {
+            background: #4CAF50;
+        }
+        .nav a.primary:hover {
+            background: #45a049;
         }
         .stats {
             background: #e9ecef;
@@ -44,6 +52,7 @@
             border-radius: 5px;
             margin-bottom: 20px;
             text-align: center;
+            font-size: 18px;
         }
         table {
             width: 100%;
@@ -58,29 +67,57 @@
         th {
             background: #2c5530;
             color: white;
+            position: sticky;
+            top: 0;
         }
         tr:hover {
-            background: #f5f5f5;
+            background: #f8f9fa;
         }
         .api {
-            font-family: monospace;
+            font-family: 'Courier New', monospace;
             background: #f8f9fa;
-            padding: 2px 6px;
-            border-radius: 3px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+        }
+        .categorie {
+            background: #e7f3ff;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            color: #0066cc;
+        }
+        .exemple {
+            font-style: italic;
+            color: #666;
+        }
+        .export-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        .export-btn:hover {
+            background: #218838;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>📖 Mots du Dictionnaire Kabyè</h1>
+        <h1>📖 Liste des Mots Kabyè</h1>
         
         <div class="nav">
-            <a href="/">➕ Ajouter un mot</a>
-            <a href="/">🏠 Accueil</a>
+            <a href="/" class="primary">➕ Ajouter un mot</a>
+            <a href="/rechercher">🔍 Rechercher</a>
+            <a href="/statistiques">📊 Statistiques</a>
+            <button class="export-btn" onclick="exporterJSON()">📥 Exporter JSON</button>
         </div>
 
         <div class="stats">
-            <strong>Total des mots : {{ mots|length }}</strong>
+            <strong>📚 Total : {{ mots|length }} mots</strong>
         </div>
 
         {% if mots %}
@@ -88,33 +125,60 @@
             <thead>
                 <tr>
                     <th>Mot Kabyè</th>
-                    <th>API</th>
-                    <th>Traduction</th>
+                    <th>Prononciation</th>
+                    <th>Traduction Française</th>
                     <th>Catégorie</th>
                     <th>Exemple</th>
                     <th>Contributeur</th>
-                    <th>Date</th>
                 </tr>
             </thead>
             <tbody>
                 {% for mot in mots %}
                 <tr>
                     <td><strong>{{ mot.mot_kabye }}</strong></td>
-                    <td><span class="api">{{ mot.api or '' }}</span></td>
+                    <td>
+                        {% if mot.api %}
+                        <span class="api">{{ mot.api }}</span>
+                        {% endif %}
+                    </td>
                     <td>{{ mot.traduction_francaise }}</td>
-                    <td>{{ mot.categorie_grammaticale or '' }}</td>
-                    <td>{{ mot.exemple_usage or '' }}</td>
+                    <td>
+                        {% if mot.categorie_grammaticale %}
+                        <span class="categorie">{{ mot.categorie_grammaticale }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="exemple">{{ mot.exemple_usage or '-' }}</td>
                     <td>{{ mot.verifie_par }}</td>
-                    <td>{{ mot.date_ajout[:10] }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         {% else %}
-        <p style="text-align: center; color: #666; padding: 40px;">
-            Aucun mot n'a été ajouté yet. <a href="/">Soyez le premier à contribuer !</a>
-        </p>
+        <div style="text-align: center; color: #666; padding: 40px;">
+            <p style="font-size: 18px; margin-bottom: 20px;">📝 Aucun mot n'a été ajouté yet.</p>
+            <a href="/" style="background: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
+                ➕ Soyez le premier à contribuer !
+            </a>
+        </div>
         {% endif %}
     </div>
+
+    <script>
+        function exporterJSON() {
+            fetch('/api/mots')
+                .then(response => response.json())
+                .then(data => {
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'dictionnaire_kabye_' + new Date().toISOString().split('T')[0] + '.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                });
+        }
+    </script>
 </body>
 </html>

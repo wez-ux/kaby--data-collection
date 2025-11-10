@@ -1,125 +1,195 @@
 from flask import Flask, render_template, request, jsonify
-import sqlite3
+import json
 import os
 from datetime import datetime
+from pathlib import Path
 
 app = Flask(__name__)
 
-def get_db_connection():
-    """Connexion DB adaptée pour Render"""
-    if 'RENDER' in os.environ:
-        # Sur Render, on utilise un chemin persistant
-        db_path = '/opt/render/project/src/dictionnaire_kabye.db'
-    else:
-        # En local
-        db_path = 'dictionnaire_kabye.db'
-    
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    return conn
+# Configuration
+DATA_DIR = Path('data')
+DATA_FILE = DATA_DIR / 'mots_kabye.json'
 
-def init_db():
-    """Initialisation de la base de données"""
-    conn = get_db_connection()
-    c = conn.cursor()
+def initialiser_donnees():
+    """Créer le dossier data et le fichier JSON s'ils n'existent pas"""
+    DATA_DIR.mkdir(exist_ok=True)
     
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS mots_kabye (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            mot_kabye TEXT NOT NULL,
-            api TEXT,
-            traduction_francaise TEXT NOT NULL,
-            categorie_grammaticale TEXT,
-            exemple_usage TEXT,
-            verifie_par TEXT,
-            date_ajout TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
+    if not DATA_FILE.exists():
+        donnees_initiales = {
+            "mots": [
+                {
+                    "id": 1,
+                    "mot_kabye": "aalayu",
+                    "api": "[âlâyú]",
+                    "traduction_francaise": "qui sera le premier",
+                    "categorie_grammaticale": "nom",
+                    "exemple_usage": "Aalayu tem qui sera le premier à finir",
+                    "verifie_par": "Admin",
+                    "date_ajout": "2024-01-15 10:00:00"
+                },
+                {
+                    "id": 2,
+                    "mot_kabye": "abaa",
+                    "api": "[ábaa]",
+                    "traduction_francaise": "exprime la pitié, l'innocence, l'agacement",
+                    "categorie_grammaticale": "interjection",
+                    "exemple_usage": "Pakpa-u hayu abaa yem",
+                    "verifie_par": "Admin",
+                    "date_ajout": "2024-01-15 10:05:00"
+                },
+                {
+                    "id": 3,
+                    "mot_kabye": "ɛ",
+                    "api": "[ɛ]",
+                    "traduction_francaise": "voyelle mi-ouverte antérieure non arrondie",
+                    "categorie_grammaticale": "lettre",
+                    "exemple_usage": "",
+                    "verifie_par": "Système",
+                    "date_ajout": "2024-01-15 10:10:00"
+                }
+            ],
+            "prochain_id": 4
+        }
+        sauvegarder_donnees(donnees_initiales)
+        return donnees_initiales
     
-    # Exemples initiaux
-    c.execute('SELECT COUNT(*) FROM mots_kabye')
-    if c.fetchone()[0] == 0:
-        exemples = [
-            ('aalayu', '[âlâyú]', 'qui sera le premier', 'nom', 'Aalayu tem qui sera le premier à finir', 'Admin'),
-            ('abaa', '[ábaa]', 'exprime la pitié, innocence', 'interjection', 'Pakpa-u hayu abaa yem', 'Admin'),
-            ('ɛ', '[ɛ]', 'voyère mi-ouverte antérieure non arrondie', 'lettre', '', 'Système')
-        ]
-        c.executemany('''
-            INSERT INTO mots_kabye (mot_kabye, api, traduction_francaise, categorie_grammaticale, exemple_usage, verifie_par)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', exemples)
-    
-    conn.commit()
-    conn.close()
+    return charger_donnees()
+
+def charger_donnees():
+    """Charger les données depuis le fichier JSON"""
+    try:
+        with open(DATA_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Erreur chargement: {e}")
+        return initialiser_donnees()
+
+def sauvegarder_donnees(donnees):
+    """Sauvegarder les données dans le fichier JSON"""
+    try:
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(donnees, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        print(f"Erreur sauvegarde: {e}")
+        return False
 
 @app.route('/')
 def accueil():
     return render_template('formulaire.html')
 
 @app.route('/sauvegarder', methods=['POST'])
-def sauvegarder():
+def sauvegarder_mot():
     try:
         data = request.get_json()
         
+        # Validation
         if not data.get('mot_kabye') or not data.get('traduction_francaise'):
-            return jsonify({'success': False, 'error': 'Mot kabyè et traduction obligatoires'})
+            return jsonify({'success': False, 'error': 'Mot kabyè et traduction française sont obligatoires'})
         
-        conn = get_db_connection()
-        c = conn.cursor()
+        # Charger les données existantes
+        donnees = charger_donnees()
         
-        c.execute('''
-            INSERT INTO mots_kabye 
-            (mot_kabye, api, traduction_francaise, categorie_grammaticale, exemple_usage, verifie_par)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (
-            data['mot_kabye'].strip(),
-            data.get('api', '').strip(),
-            data['traduction_francaise'].strip(),
-            data.get('categorie_grammaticale', '').strip(),
-            data.get('exemple_usage', '').strip(),
-            data.get('verifie_par', 'Anonyme').strip()
-        ))
+        # Vérifier si le mot existe déjà
+        mot_existe = any(mot['mot_kabye'].lower() == data['mot_kabye'].lower() 
+                        for mot in donnees['mots'])
         
-        conn.commit()
-        conn.close()
+        if mot_existe:
+            return jsonify({'success': False, 'error': 'Ce mot existe déjà dans le dictionnaire'})
         
-        return jsonify({
-            'success': True, 
-            'message': f'✅ Mot "{data["mot_kabye"]}" sauvegardé !'
-        })
-    
+        # Créer le nouveau mot
+        nouveau_mot = {
+            "id": donnees['prochain_id'],
+            "mot_kabye": data['mot_kabye'].strip(),
+            "api": data.get('api', '').strip(),
+            "traduction_francaise": data['traduction_francaise'].strip(),
+            "categorie_grammaticale": data.get('categorie_grammaticale', '').strip(),
+            "exemple_usage": data.get('exemple_usage', '').strip(),
+            "verifie_par": data.get('verifie_par', 'Anonyme').strip(),
+            "date_ajout": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+        # Ajouter le mot et mettre à jour l'ID
+        donnees['mots'].append(nouveau_mot)
+        donnees['prochain_id'] += 1
+        
+        # Sauvegarder
+        if sauvegarder_donnees(donnees):
+            return jsonify({
+                'success': True, 
+                'message': f'✅ Mot "{data["mot_kabye"]}" sauvegardé avec succès !'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Erreur lors de la sauvegarde'})
+            
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/mots')
 def liste_mots():
-    """Voir tous les mots"""
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('SELECT * FROM mots_kabye ORDER BY date_ajout DESC')
-    mots = c.fetchall()
-    conn.close()
+    """Afficher tous les mots"""
+    donnees = charger_donnees()
+    mots = donnees['mots']
     
-    return render_template('liste_mots.html', mots=mots)
+    # Trier par mot kabyè
+    mots_tries = sorted(mots, key=lambda x: x['mot_kabye'])
+    
+    return render_template('liste_mots.html', mots=mots_tries)
 
 @app.route('/api/mots')
 def api_mots():
     """API pour récupérer les mots en JSON"""
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('SELECT * FROM mots_kabye ORDER BY mot_kabye')
-    mots = c.fetchall()
-    conn.close()
+    donnees = charger_donnees()
+    return jsonify(donnees['mots'])
+
+@app.route('/statistiques')
+def statistiques():
+    """Page de statistiques"""
+    donnees = charger_donnees()
+    mots = donnees['mots']
     
-    mots_list = []
+    stats = {
+        'total_mots': len(mots),
+        'categories': {},
+        'contributeurs': {}
+    }
+    
+    # Compter par catégorie
     for mot in mots:
-        mots_list.append(dict(mot))
+        categorie = mot['categorie_grammaticale'] or 'Non spécifiée'
+        stats['categories'][categorie] = stats['categories'].get(categorie, 0) + 1
+        
+        # Compter par contributeur
+        contributeur = mot['verifie_par']
+        stats['contributeurs'][contributeur] = stats['contributeurs'].get(contributeur, 0) + 1
     
-    return jsonify(mots_list)
+    return render_template('statistiques.html', 
+                         stats=stats, 
+                         mots=mots)
+
+@app.route('/rechercher')
+def rechercher():
+    """Page de recherche"""
+    terme = request.args.get('q', '')
+    donnees = charger_donnees()
+    
+    if terme:
+        mots_trouves = [
+            mot for mot in donnees['mots']
+            if terme.lower() in mot['mot_kabye'].lower() 
+            or terme.lower() in mot['traduction_francaise'].lower()
+        ]
+    else:
+        mots_trouves = []
+    
+    return render_template('rechercher.html', 
+                         mots=mots_trouves, 
+                         terme=terme,
+                         total=len(mots_trouves))
 
 # Initialisation au démarrage
-init_db()
+initialiser_donnees()
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=True)
